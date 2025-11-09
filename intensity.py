@@ -1,15 +1,17 @@
+import json
 import os
-import numpy as np
+import sys
+import tempfile
+
+import colorama
 import librosa
+import numpy as np
 import soundfile as sf
 import speech_recognition as sr
-import tempfile
-import colorama
 from colorama import Fore
-import json
-import sys
 
 colorama.init(autoreset=True)
+
 
 def analyze_audio_volume(audio_file_path):
     if not os.path.exists(audio_file_path):
@@ -49,36 +51,38 @@ def analyze_audio_volume(audio_file_path):
                 return
 
     intervals = librosa.effects.split(y, top_db=40)
-    
+
     if not intervals.any():
         print("음성 구간을 찾을 수 없습니다.")
         return
 
     spoken_audio = np.concatenate([y[start:end] for start, end in intervals])
     text_no_spaces = full_text.replace(" ", "")
-    
+
     if not text_no_spaces:
         print("인식된 텍스트가 비어있습니다.")
         return
 
     onset_strength = librosa.onset.onset_strength(y=spoken_audio, sr=sr_native)
-    
-    onset_frames = librosa.onset.onset_detect(onset_envelope=onset_strength, sr=sr_native, units='frames', backtrack=True)
-    
+
+    onset_frames = librosa.onset.onset_detect(
+        onset_envelope=onset_strength, sr=sr_native, units='frames', backtrack=True)
+
     if len(onset_frames) > len(text_no_spaces) - 1:
-        sorted_onset_frames = sorted(onset_frames, key=lambda frame: onset_strength[frame], reverse=True)
+        sorted_onset_frames = sorted(
+            onset_frames, key=lambda frame: onset_strength[frame], reverse=True)
         boundary_frames = sorted(sorted_onset_frames[:len(text_no_spaces)-1])
     else:
         boundary_frames = list(onset_frames)
-        
+
     boundary_samples = librosa.frames_to_samples(boundary_frames)
     boundaries = np.concatenate(([0], boundary_samples, [len(spoken_audio)]))
-    
+
     char_volumes = []
     for i, char in enumerate(text_no_spaces):
         if i >= len(boundaries) - 1:
             break
-        
+
         start_sample = int(boundaries[i])
         end_sample = int(boundaries[i+1])
         char_audio = spoken_audio[start_sample:end_sample]
@@ -111,7 +115,8 @@ def analyze_audio_volume(audio_file_path):
     except Exception as e:
         print(f"JSON 파일 저장 중 오류가 발생했습니다: {e}")
 
-    volumes = [item['volume'] for item in final_char_volumes if item['char'] != ' ']
+    volumes = [item['volume']
+               for item in final_char_volumes if item['char'] != ' ']
     if not volumes:
         print("인식된 텍스트에 음량이 없습니다.")
         return
@@ -123,7 +128,7 @@ def analyze_audio_volume(audio_file_path):
     for item in final_char_volumes:
         char = item['char']
         volume = item['volume']
-        
+
         if char == ' ':
             console_output += ' '
             continue
@@ -132,24 +137,25 @@ def analyze_audio_volume(audio_file_path):
             normalized_volume = (volume - min_vol) / (max_vol - min_vol)
         else:
             normalized_volume = 0.5
-            
+
         if normalized_volume > 0.75:
             color = Fore.RED
         elif normalized_volume > 0.25:
             color = Fore.GREEN
         else:
             color = Fore.YELLOW
-            
+
         console_output += f"{color}{char}"
-    
+
     print(console_output)
     print("\n")
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("사용법: python intensity.py <오디오_파일_경로>")
         print("예: python intensity.py test5.mp3")
-        sys.exit(1) 
+        sys.exit(1)
 
-    audio_file = sys.argv[1] 
+    audio_file = sys.argv[1]
     analyze_audio_volume(audio_file)
