@@ -1,14 +1,16 @@
+import json
 import os
-import numpy as np
+import tempfile
+from os import PathLike
+from typing import Any, Dict, List
+
 import librosa
+import numpy as np
 import soundfile as sf
 import speech_recognition as sr
-import tempfile
-import json
-from os import PathLike
-from typing import List, Dict, Any
 
-def analyze_intensity(audio_file_path: PathLike) -> List[Dict[str, Any]]:
+
+def analyze_intensity(audio_file_path: str | PathLike) -> List[Dict[str, Any]]:
     if not os.path.exists(audio_file_path):
         return []
 
@@ -17,6 +19,7 @@ def analyze_intensity(audio_file_path: PathLike) -> List[Dict[str, Any]]:
     except Exception as e:
         return []
 
+    # speech-to-text
     full_text = ""
     r = sr.Recognizer()
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -36,35 +39,40 @@ def analyze_intensity(audio_file_path: PathLike) -> List[Dict[str, Any]]:
             except sr.RequestError as e:
                 return []
 
+    # non-silent intervals
     intervals = librosa.effects.split(y, top_db=40)
-    
+
     if not intervals.any():
         return []
 
     spoken_audio = np.concatenate([y[start:end] for start, end in intervals])
     text_no_spaces = full_text.replace(" ", "")
-    
+
     if not text_no_spaces:
         return []
 
     onset_strength = librosa.onset.onset_strength(y=spoken_audio, sr=sr_native)
-    
-    onset_frames = librosa.onset.onset_detect(onset_envelope=onset_strength, sr=sr_native, units='frames', backtrack=True)
-    
+
+    # onset detection
+    onset_frames = librosa.onset.onset_detect(
+        onset_envelope=onset_strength, sr=sr_native, units='frames', backtrack=True)
+
     if len(onset_frames) > len(text_no_spaces) - 1:
-        sorted_onset_frames = sorted(onset_frames, key=lambda frame: onset_strength[frame], reverse=True)
+        sorted_onset_frames = sorted(
+            onset_frames, key=lambda frame: onset_strength[frame], reverse=True)
         boundary_frames = sorted(sorted_onset_frames[:len(text_no_spaces)-1])
     else:
         boundary_frames = list(onset_frames)
-        
+
     boundary_samples = librosa.frames_to_samples(boundary_frames)
     boundaries = np.concatenate(([0], boundary_samples, [len(spoken_audio)]))
-    
+
+    # estimate intensity per character
     char_volumes = []
     for i, char in enumerate(text_no_spaces):
         if i >= len(boundaries) - 1:
             break
-        
+
         start_sample = int(boundaries[i])
         end_sample = int(boundaries[i+1])
         char_audio = spoken_audio[start_sample:end_sample]
@@ -74,6 +82,7 @@ def analyze_intensity(audio_file_path: PathLike) -> List[Dict[str, Any]]:
             volume = 20 * np.log10(rms + 1e-9)
             char_volumes.append({'char': char, 'volume': round(volume, 2)})
 
+    # reconstruct, add paddings between words
     words_list = full_text.split()
     final_char_volumes: List[Dict[str, Any]] = []
     text_cursor = 0
