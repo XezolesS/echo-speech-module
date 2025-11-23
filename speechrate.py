@@ -1,8 +1,10 @@
-import whisper
 import os
 import sys
 import time
 from os import PathLike
+
+import whisper
+
 
 def analyze_speechrate(audio_file_path: str | PathLike) -> dict:
     if not os.path.exists(audio_file_path):
@@ -22,7 +24,8 @@ def analyze_speechrate(audio_file_path: str | PathLike) -> dict:
         if not segments or not full_transcript:
             return {"status": "error", "message": "No speech detected"}
 
-        total_speech_time_seconds = sum(seg['end'] - seg['start'] for seg in segments)
+        total_speech_time_seconds = sum(
+            seg['end'] - seg['start'] for seg in segments)
         total_speech_time_seconds = round(total_speech_time_seconds, 2)
 
         if total_speech_time_seconds <= 0:
@@ -50,15 +53,3 @@ def analyze_speechrate(audio_file_path: str | PathLike) -> dict:
 
     except Exception as e:
         return {"status": "error", "message": str(e)}
-
-if __name__ == "__main__":
-    import json
-    
-    if len(sys.argv) != 2:
-        print("Usage: python speechrate.py <audio_file_path>")
-        sys.exit(1) 
-
-    audio_file_to_test = sys.argv[1]
-    result = analyze_speechrate(audio_file_to_test)
-    
-    print(json.dumps(result, ensure_ascii=False, indent=4))
