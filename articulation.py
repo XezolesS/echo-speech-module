@@ -105,5 +105,3 @@ def analyze_articulation(audio_file_path, reference_text=None):
         result["message"] = str(e)
 
     return result
-
-print(analyze_articulation("EN10QC267_EN0144_20211027.wav", reference_text="지금 다른 사람은 별로 보고 싶지 않은 것 같아요 학위 논문 때문에 정신이 없고 항상 아들이랑 놀기 때문에 사람 많은 것보다 그냥 혼자 시간을 조금 보내고 싶어요"))
