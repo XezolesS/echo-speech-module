@@ -1,8 +1,10 @@
-import speech_recognition as sr
+import os
+
+import Levenshtein
 import librosa
 import numpy as np
-import Levenshtein
-import os
+import speech_recognition as sr
+
 
 def analyze_articulation(audio_file_path, reference_text=None):
     """
@@ -16,7 +18,7 @@ def analyze_articulation(audio_file_path, reference_text=None):
     Returns:
         dict: 분석 결과가 담긴 딕셔너리
     """
-    
+
     result = {
         "status": "success",
         "transcription": "",          # 인식된 텍스트
@@ -44,26 +46,28 @@ def analyze_articulation(audio_file_path, reference_text=None):
         # 침묵 구간(Silence)과 발화 구간(Speech) 분리
         # top_db: 침묵으로 간주할 데시벨 임계값 (조절 가능)
         intervals = librosa.effects.split(y, top_db=20)
-        
+
         # 발화된 구간(순수 말하기 시간)의 총 길이 계산
         speech_duration = 0
         for start, end in intervals:
             speech_duration += (end - start) / sr_rate
-        
+
         pause_duration = total_duration - speech_duration
-        
+
         # 침묵 비율 계산
         if total_duration > 0:
-            result["pause_ratio"] = float(round(pause_duration / total_duration, 3))
+            result["pause_ratio"] = float(
+                round(pause_duration / total_duration, 3))
 
         # 3. 음성 인식 (Speech Recognition 사용)
         recognizer = sr.Recognizer()
         with sr.AudioFile(audio_file_path) as source:
             audio_data = recognizer.record(source)
-            
+
         try:
             # Google Web Speech API 사용 (한국어 설정)
-            recognized_text = recognizer.recognize_google(audio_data, language='ko-KR')
+            recognized_text = recognizer.recognize_google(
+                audio_data, language='ko-KR')
             result["transcription"] = recognized_text
         except sr.UnknownValueError:
             result["status"] = "warning"
@@ -77,25 +81,26 @@ def analyze_articulation(audio_file_path, reference_text=None):
         # 4. 발화 속도 분석 (음절 단위)
         # 공백을 제거한 순수 글자 수 계산 (한국어 기준)
         num_syllables = len(recognized_text.replace(" ", ""))
-        
+
         if speech_duration > 0:
-            result["articulation_rate"] = float(round(num_syllables / speech_duration, 2)) # 순수 발화 시간 기준
+            result["articulation_rate"] = float(
+                round(num_syllables / speech_duration, 2))  # 순수 발화 시간 기준
 
         # 5. 정확성 분석 (Reference Text가 있는 경우)
         if reference_text:
             # 텍스트 정규화 (공백 제거 후 비교가 일반적임)
             ref_clean = reference_text.strip()
             hyp_clean = recognized_text.strip()
-            
+
             # Levenshtein 거리 계산 (편집 거리)
             distance = Levenshtein.distance(ref_clean, hyp_clean)
             length = len(ref_clean)
-            
+
             # CER (Character Error Rate) 계산
             # CER = (삽입 + 삭제 + 대체) / 원본 길이
             cer = distance / length if length > 0 else 0
             result["cer"] = round(cer, 4)
-            
+
             # 정확도 점수 (1 - CER) * 100, 음수가 되지 않도록 처리
             accuracy = max(0, (1 - cer) * 100)
             result["accuracy_score"] = round(accuracy, 2)
