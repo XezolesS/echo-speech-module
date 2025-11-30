@@ -54,7 +54,7 @@ def analyze_articulation(audio_file_path, reference_text=None):
         
         # 침묵 비율 계산
         if total_duration > 0:
-            result["pause_ratio"] = round(pause_duration / total_duration, 3)
+            result["pause_ratio"] = float(round(pause_duration / total_duration, 3))
 
         # 3. 음성 인식 (Speech Recognition 사용)
         recognizer = sr.Recognizer()
@@ -79,7 +79,7 @@ def analyze_articulation(audio_file_path, reference_text=None):
         num_syllables = len(recognized_text.replace(" ", ""))
         
         if speech_duration > 0:
-            result["articulation_rate"] = round(num_syllables / speech_duration, 2) # 순수 발화 시간 기준
+            result["articulation_rate"] = float(round(num_syllables / speech_duration, 2)) # 순수 발화 시간 기준
 
         # 5. 정확성 분석 (Reference Text가 있는 경우)
         if reference_text:
