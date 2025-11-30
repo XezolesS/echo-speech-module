@@ -10,8 +10,13 @@ import soundfile as sf
 import speech_recognition as sr
 
 
-def get_normal_intensity(*args) -> dict:
-    # 20대 한국인 남녀의 정상 발화 강도 기준값을 반환합니다.
+def get_normal_intensity() -> dict:
+    """
+    20대 한국인 남녀의 정상 발성 크기 기준값을 반환합니다.
+
+    Returns:
+        dict: 남성 및 여성의 평균(mean)과 표준편차(stddev)를 포함한 딕셔너리
+    """
     return {
         "male_20": {
             "mean": 70.0,

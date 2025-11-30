@@ -5,13 +5,10 @@ from os import PathLike
 import whisper
 
 
-def get_normal_speechrate(*args) -> dict:
+def get_normal_speechrate() -> dict:
     """
     20대 한국인 남녀의 정상 발화 속도(Speech Rate) 기준값을 반환합니다.
-    
-    *args는 수치 계산에 필요한 파라미터입니다.
-    정상 수치가 고정값(상수, pre-calculated)인 경우 없어도 무방합니다.
-    
+
     Returns:
         dict: 남성 및 여성의 평균(mean)과 표준편차(stddev)를 포함한 딕셔너리
     """
