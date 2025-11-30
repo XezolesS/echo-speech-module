@@ -105,7 +105,7 @@ def analyze_articulation(audio_file_path, reference_text=None):
             accuracy = max(0, (1 - cer) * 100)
             result["accuracy_score"] = round(accuracy, 2)
 
-    except Exception as e:
+    except (OSError, ValueError, TypeError, librosa.util.exceptions.ParameterError) as e:
         result["status"] = "error"
         result["message"] = str(e)
 
