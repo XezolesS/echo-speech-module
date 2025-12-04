@@ -25,6 +25,15 @@ Author:
 import argparse
 import sys
 from pathlib import Path
+import logging
+from typing import NoReturn
+
+
+SUPPORTED_EXTENSIONS = {
+    ".wav"
+}
+
+LOG = logging.Logger(name="echosm", level=logging.DEBUG)
 
 
 def parse_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -35,25 +44,25 @@ def parse_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     )
     parser.add_argument(
         "-l", "--intensity",
-        action='store_true',
+        action="store_true",
         default=None,
         help="Analyze speech intensity(loudness)."
     )
     parser.add_argument(
         "-s", "--speechrate",
-        action='store_true',
+        action="store_true",
         default=None,
         help="Analyze speechrate."
     )
     parser.add_argument(
         "-i", "--intonation",
-        action='store_true',
+        action="store_true",
         default=None,
         help="Analyze intonation."
     )
     parser.add_argument(
         "-a", "--articulation",
-        action='store_true',
+        action="store_true",
         default=None,
         help="Analyze articulation."
     )
@@ -66,7 +75,7 @@ def parse_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main():
     # init argument parser
     parser = argparse.ArgumentParser(
         prog="run.py",
@@ -81,14 +90,19 @@ def main() -> None:
 
     # process file path
     file_path = Path(args.input_file[0])
-    if not file_path.is_file():
-        print(f'{file_path} is not a file.')
-        sys.exit(2)
 
-    if file_path.suffix != '.wav':
-        print(f'{file_path.suffix} file is not supported.'
-              '\nSupports: .wav')
-        sys.exit(2)
+    if not file_path.exists():
+        LOG.error("File %s not exists.", file_path)
+        sys.exit(-1)
+
+    if not file_path.is_file():
+        LOG.error("%s is not a file.", file_path)
+        sys.exit(-1)
+
+    if file_path.suffix not in SUPPORTED_EXTENSIONS:
+        LOG.error("%s file is not supported.\nSupports:\n%s",
+                  file_path.suffix, SUPPORTED_EXTENSIONS)
+        sys.exit(-1)
 
     # process intensity
     if args.intensity:
