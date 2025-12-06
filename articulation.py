@@ -1,3 +1,10 @@
+"""
+Articulation analyzer module.
+
+Author:
+    김유환
+"""
+
 from os import PathLike
 
 import Levenshtein
@@ -5,68 +12,88 @@ import librosa
 from speech_recognition import RequestError, UnknownValueError
 
 from audio_utils import load_audio, transcribe_audio_file
-
 from response import ArticulationResponse, ErrorResponse, Response
 
 
-def analyze_articulation(audio_file_path: str | PathLike, reference_text: str | None = None) -> Response:
+def analyze_articulation(
+        audio_file_path: str | PathLike,
+        reference_text: str | None = None) -> Response:
     """
-    오디오 파일을 입력받아 조음 정확성 및 유창성 지표를 분석합니다.
+    Analyze articulation quality and fluency features from a speech audio file.
+
+    This function extracts various speech metrics such as articulation rate,
+    pause ratio, and (optionally) transcription accuracy using Levenshtein
+    distance when a reference script is provided. Speech segments are detected
+    by removing silence using `librosa.effects.split`, and the function uses a
+    Korean speech recognizer (`ko-KR`) for transcription.
 
     Args:
-        audio_file_path (str): 분석할 오디오 파일의 경로 (.wav, .flac 등)
-        reference_text (str, optional): 발화해야 할 원본 대본. 
-                                      제공 시 정확도(Accuracy) 지표가 계산됩니다.
+        audio_file_path (str | PathLike):
+            Path to the input audio file to analyze (e.g., `.wav`, `.flac`).
+        reference_text (str, optional):
+            The expected spoken script. If provided, the function computes
+            accuracy and character error rate (CER) by comparing the reference
+            text to the transcribed output.
 
     Returns:
-        dict: 분석 결과가 담긴 딕셔너리
+        Response:
+            An `ArticulationResponse` object containing:
+                - status (str): Processing result status.
+                - duration (float): Total duration of the audio in seconds.
+                - articulation_rate (float): Syllables per second of spoken audio.
+                - pause_ratio (float): Ratio of silence duration to total duration.
+                - accuracy_score (float): Percentage accuracy vs. reference text.
+                - char_error_rate (float): CER based on Levenshtein distance.
+                - transcription (str): Recognized text from the audio.
+
+    Raises:
+        UnknownValueError:
+            Raised when the audio cannot be reliably transcribed.
+        RequestError:
+            Raised when the transcription service encounters a request failure.
+
+    Notes:
+        - Articulation rate is estimated by counting characters in the
+          transcribed Korean text (spaces removed). This is accurate for Korean
+          because each Hangul syllable block corresponds to one syllable.
+          Results will be less accurate for languages where characters do not
+          map 1:1 to syllables.
+        - Silence detection uses librosa's energy-based splitting with `top_db=40`.
     """
-    # 2. 음향 신호 분석 (Librosa 사용)
-    # y: 오디오 시계열 데이터, sr_rate: 샘플링 레이트
     y, sampling_rate = load_audio(audio_file_path)
-    total_duration = librosa.get_duration(y=y, sr=sampling_rate)
 
-    # 침묵 구간(Silence)과 발화 구간(Speech) 분리
-    # top_db: 침묵으로 간주할 데시벨 임계값 (조절 가능)
-    intervals = librosa.effects.split(y, top_db=20)
-
-    # 발화된 구간(순수 말하기 시간)의 총 길이 계산
+    # Get length of spoken audio
+    intervals = librosa.effects.split(y, top_db=40)
     speech_duration = 0
     for start, end in intervals:
         speech_duration += (end - start) / sampling_rate
 
+    total_duration = librosa.get_duration(y=y, sr=sampling_rate)
     pause_duration = total_duration - speech_duration
-
-    # 침묵 비율 계산
     pause_ratio = pause_duration / total_duration if total_duration > 0 else 0
 
-    # 3. 음성 인식 (Speech Recognition 사용)
+    # Transcribe audio
     try:
         transcribed_text = transcribe_audio_file(
             audio_file_path, language='ko-KR').strip()
     except (UnknownValueError, RequestError) as e:
         return ErrorResponse(error_name=e.__class__.__name__, error_details=e.args[0])
 
-    # 4. 발화 속도 분석 (음절 단위)
-    # 공백을 제거한 순수 글자 수 계산 (한국어 기준)
+    # Calculate articulation rate (syllables per second)
+    # This heuristic works well for Korean but is inaccurate for languages
+    # where characters do not map 1:1 to syllables (e.g., English).
     num_syllables = len(transcribed_text.replace(" ", ""))
     articulation_rate = num_syllables / speech_duration if speech_duration > 0 else 0
 
-    # 5. 정확성 분석 (Reference Text가 있는 경우)
+    # Evaluate accuracy (if reference_text is given)
     if reference_text:
-        # 텍스트 정규화 (공백 제거 후 비교가 일반적임)
         ref_clean = reference_text.strip()
         hyp_clean = transcribed_text.strip()
 
-        # Levenshtein 거리 계산 (편집 거리)
         distance = Levenshtein.distance(ref_clean, hyp_clean)
         length = len(ref_clean)
 
-        # CER (Character Error Rate) 계산
-        # CER = (삽입 + 삭제 + 대체) / 원본 길이
         cer = distance / length if length > 0 else 0
-
-        # 정확도 점수 (1 - CER) * 100, 음수가 되지 않도록 처리
         accuracy = max(0, (1 - cer) * 100)
     else:
         cer = 0

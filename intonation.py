@@ -1,11 +1,16 @@
-"""Intonation analysis utilities.
+"""
+Intonation analyzer module.
 
 This module computes character-aligned prosodic summaries (duration, F0)
 and a pitch contour mapped to a character axis. It relies on shared
 helpers from `audio_utils` and the `analyze_intensity` result which
 provides per-character volumes and the character sequence.
+
+Author:
+    김유환
 """
 
+from os import PathLike
 from typing import Any, Dict, List, Tuple
 
 import librosa
@@ -23,30 +28,38 @@ def select_boundaries_for_chars(
     hop_length: int,
     target_char_count: int,
 ) -> np.ndarray:
-    """Generate sample-index boundaries matching non-space character count.
+    """
+    Generate segment boundaries aligned to the number of non-space characters.
 
-    The function attempts to use detected onsets as boundaries. If there
-    are more onsets than required it selects the strongest ones by onset
-    energy; if there are fewer, it falls back to an even partitioning.
+    The function attempts to use detected onset frames as boundaries. If
+    there are more onsets than needed, it keeps only the strongest ones
+    (based on onset energy). If fewer are available, it falls back to
+    evenly spaced boundaries.
 
     Args:
-        spoken_len: length of the spoken audio in samples.
-        onset_envelope: onset strength envelope (per frame).
-        onset_frames: detected onset frame indices.
-        hop_length: hop length used when converting frames -> samples.
-        target_char_count: number of non-space characters to segment.
+        spoken_len (int):
+            Length of the spoken audio in samples.
+        onset_envelope (np.ndarray):
+            Onset strength envelope (one value per frame).
+        onset_frames (np.ndarray):
+            Indices of detected onset frames.
+        hop_length (int):
+            Hop length used for converting frames to sample indices.
+        target_char_count (int):
+            Number of non-space characters to segment.
 
     Returns:
-        A 1-D integer numpy array of sample indices with length
-        ``target_char_count + 1`` representing segment boundaries.
+        np.ndarray:
+            A 1-D integer array of sample indices with length
+            ``target_char_count + 1`` defining segment boundaries.
     """
     if target_char_count <= 0:
         return np.array([0, spoken_len])
 
-    # onset frame -> sample
+    # Convert onset frames to sample indices
     onset_strength = onset_envelope
     if onset_frames.size > target_char_count - 1:
-        # onset 강도 기준 상위 N-1 선택 후 정렬
+        # Select top N-1 strongest onsets, then sort
         sorted_frames = sorted(
             onset_frames, key=lambda fr: onset_strength[fr], reverse=True
         )[: (target_char_count - 1)]
@@ -54,15 +67,16 @@ def select_boundaries_for_chars(
         boundary_samples = librosa.frames_to_samples(
             boundary_frames, hop_length=hop_length)
     else:
+        # Use all available onset frames
         boundary_samples = librosa.frames_to_samples(
             onset_frames, hop_length=hop_length)
 
-    # 앞/뒤 경계 추가
+    # Add start/end boundaries
     boundaries = np.concatenate(
         [np.array([0]), boundary_samples.astype(int), np.array([spoken_len])]
     )
 
-    # 목표 개수와 다르면 균등분할로 재보정
+    # If boundary count mismatches, fall back to uniform partitioning
     needed = target_char_count + 1
     if len(boundaries) != needed:
         boundaries = np.linspace(0, spoken_len, num=needed, dtype=int)
@@ -70,12 +84,32 @@ def select_boundaries_for_chars(
     return boundaries
 
 
-def pyin_f0(y: np.ndarray, sampling_rate: int | float, frame_length: int = 2048, hop_length: int = 256
-            ) -> Tuple[np.ndarray, np.ndarray]:
-    """Compute frame-wise F0 (Hz) using librosa.pyin.
+def pyin_f0(
+    y: np.ndarray,
+    sampling_rate: int | float,
+    frame_length: int = 2048,
+    hop_length: int = 256
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Compute frame-wise F0 (pitch) using librosa.pyin.
 
-    Returns frame times (seconds) and F0 values (Hz). Unvoiced frames are
-    left as NaN so callers can ignore them for median computations.
+    Unvoiced frames are returned as NaN so downstream median or smoothing
+    operations can naturally ignore them.
+
+    Args:
+        y (np.ndarray):
+            Audio signal.
+        sampling_rate (int | float):
+            Sampling rate of the audio.
+        frame_length (int):
+            Frame length for PYIN.
+        hop_length (int):
+            Hop length for PYIN.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]:
+            - times (float seconds): one time stamp per frame.
+            - f0_hz (float Hz): detected F0 values (NaN for unvoiced).
     """
     f0, _, _ = librosa.pyin(
         y,
@@ -87,7 +121,6 @@ def pyin_f0(y: np.ndarray, sampling_rate: int | float, frame_length: int = 2048,
     times = librosa.frames_to_time(
         np.arange(len(f0)), sr=sampling_rate, hop_length=hop_length)
 
-    # Keep NaNs for unvoiced frames so downstream median ignores them.
     return times, f0
 
 
@@ -98,17 +131,53 @@ def summarize_char_level_prosody(
     volumes: List[float],
     hop_length: int = 256,
 ) -> Dict[str, Any]:
-    """Produce per-character prosody summary aligned to ``chars``.
-
-    For each character (including spaces) the function returns a dict with
-    volume (dB), duration (seconds) and a representative F0 (Hz) where
-    available. Spaces receive duration 0 and f0=None.
     """
-    # 1) onset envelope and frame indices (frame-units)
+    Produce character-aligned prosodic summaries (duration, F0, volume).
+
+    This function:
+      1. Detects onset boundaries and aligns them to the number of non-space
+         characters.
+      2. Computes F0 (pitch) for the full spoken audio.
+      3. Assigns each non-space character a segment and computes:
+         - duration (seconds)
+         - representative F0 (median over segment)
+         - volume (precomputed)
+      4. Builds a pitch contour aligned to character-axis coordinates.
+
+    Characters that are spaces receive:
+         duration = 0, f0 = None
+
+    Args:
+        spoken_audio (np.ndarray):
+            The silence-trimmed audio signal.
+        sampling_rate (int | float):
+            Sampling rate of the audio.
+        chars (List[str]):
+            List of characters including spaces.
+        volumes (List[float]):
+            Precomputed per-character loudness (dB).
+        hop_length (int):
+            Hop length for onset detection and F0 analysis.
+
+    Returns:
+        Dict[str, Any]:
+            {
+                "char_summary": List[Dict],
+                "pitch_contour_char": {
+                    "char_axis": List[float],
+                    "f0_hz": List[Optional[float]],
+                    "chars": List[str]
+                }
+            }
+    """
+    # 1) Detect onset envelope and peak frames
     onset_env, onset_frames = detect_onsets(
         spoken_audio, sampling_rate, hop_length=hop_length)
 
+    # Count non-space characters
     nonspace_count = sum(ch != " " for ch in chars)
+
+    # Select suitable boundaries
     boundaries = select_boundaries_for_chars(
         spoken_len=len(spoken_audio),
         onset_envelope=onset_env,
@@ -121,27 +190,26 @@ def summarize_char_level_prosody(
     times, f0_hz = pyin_f0(
         spoken_audio, sampling_rate=sampling_rate, hop_length=hop_length)
 
-    # Map each F0 frame to its starting sample index for segment membership tests
+    # Frame start-sample positions for boundary mapping
     frame_samples = librosa.frames_to_samples(
         np.arange(len(f0_hz)), hop_length=hop_length)
 
-    # 3) 문자 단위 요약 (공백은 구간 배정 없이 pass)
-    # seg_idx: 공백 제외 문자마다 하나의 세그먼트 소비
-    # nonspace_indicies: non-space 문자 인덱스 목록 (원본 chars 축 기준)
-    # nonspace_segments: 각 non-space 문자에 대응하는 (시작샘플, 끝샘플, 원본 문자 인덱스) 목록 구축
+    # 3) Character-level summary
     char_summary = []
     seg_idx = 0
     nonspace_indices = [i for i, ch in enumerate(chars) if ch != " "]
     nonspace_segments: List[Tuple[int, int, int]] = []
+
     for ch, vol in zip(chars, volumes):
         if ch == " ":
+            # Spaces receive zero-duration and no F0
             char_summary.append(
                 {"char": ch, "volume_db": vol, "duration_sec": 0.0, "f0_hz": None}
             )
             continue
 
         if seg_idx >= len(boundaries) - 1:
-            # 경계가 모자라면 잔여는 0 길이 처리
+            # If out of boundaries, assign zero-length
             char_summary.append(
                 {"char": ch, "volume_db": vol, "duration_sec": 0.0, "f0_hz": None}
             )
@@ -150,16 +218,15 @@ def summarize_char_level_prosody(
         s = int(boundaries[seg_idx])
         e = int(boundaries[seg_idx + 1])
 
-        # non-space 문자 세그먼트 기록 (원본 문자 인덱스는 nonspace_indices로부터 매핑)
+        # Record segment for pitch-contour mapping
         if seg_idx < len(nonspace_indices):
             nonspace_segments.append((s, e, nonspace_indices[seg_idx]))
         seg_idx += 1
 
-        # duration in seconds for this character segment
+        # ㅇuration in seconds for this character segment
         duration = max(0.0, (e - s) / sampling_rate)
 
-        # f0: 해당 구간에 걸친 frame들 선택 후 중앙값
-        # Select frames whose start-sample falls inside the character segment
+        # F0 median for frames inside this segment
         in_seg = (frame_samples >= s) & (frame_samples < e)
         f0_vals = f0_hz[in_seg]
         if f0_vals.size > 0:
@@ -174,16 +241,13 @@ def summarize_char_level_prosody(
                 duration, 3), "f0_hz": f0_rep}
         )
 
-    # 4) 글자 축(character axis)으로의 pitch contour 구성
-    # - 각 frame을 해당 non-space 문자 세그먼트에 매핑
-    # - 글자 인덱스 + 구간 내 진행도(0~1)를 x좌표로 사용
+    # 4) Build pitch contour on character axis
     char_axis_pos: List[float] = []
     char_axis_f0: List[Any] = []
     seg_ptr = 0
-    # nonspace_segments는 s(샘플) 기준으로 정렬되어 있음
+
     for fs, f0 in zip(frame_samples, f0_hz):
-        # NaN F0도 contour에는 포함(시각화를 위해 None으로 변환)
-        # 현재 frame이 속한 세그먼트를 찾기 위해 seg_ptr를 전진
+        # Advance segment pointer if frame is beyond the current boundary
         while seg_ptr < len(nonspace_segments) and fs >= nonspace_segments[seg_ptr][1]:
             seg_ptr += 1
 
@@ -192,19 +256,20 @@ def summarize_char_level_prosody(
 
         s, e, char_idx = nonspace_segments[seg_ptr]
 
-        # 세그먼트 시작 전이거나 비정상 구간인 경우 skip
+        # Skip frames not inside the segment
         if fs < s or fs >= e or e <= s:
             continue
 
+         # Fractional progress in this character segment
         frac = float((fs - s) / (e - s)) if (e - s) > 0 else 0.0
         x = float(char_idx) + frac
         char_axis_pos.append(x)
         char_axis_f0.append(None if np.isnan(f0) else float(f0))
 
     pitch_contour_char = {
-        "char_axis": char_axis_pos,  # 예: 0.0 ~ len(chars)-1 범위의 연속 좌표
+        "char_axis": char_axis_pos,
         "f0_hz": char_axis_f0,
-        "chars": chars,  # 라벨링 용이하도록 원본 문자 배열 제공
+        "chars": chars,
     }
 
     return {
@@ -213,14 +278,27 @@ def summarize_char_level_prosody(
     }
 
 
-def analyze_intonation(audio_file_path: str) -> Response:
+def analyze_intonation(audio_file_path: str | PathLike) -> Response:
     """
-    1) intensity + 문자 리스트: 기존 analyze_intensity() 호출
-    2) spoken 오디오 생성
-    3) 문자 축에 맞춘 duration/F0 계산
-    4) 결과 + 시각화
+    Analyze character-level intonation patterns for the given audio file.
+
+    Workflow:
+        1. Run `analyze_intensity()` to obtain character list and per-character volumes.
+        2. Remove silence from the audio to obtain spoken-only frames.
+        3. Generate character-aligned prosody summaries (duration, F0, volume).
+        4. Build character-axis pitch contours.
+        5. Return an IntonationResponse containing the full analysis.
+
+    Args:
+        audio_file_path (str):
+            Path to the input audio file.
+
+    Returns:
+        Response:
+            - IntonationResponse on success
+            - ErrorResponse if silence removal or intensity analysis fails
     """
-    # Get intensity
+    # 1) Get intensity results
     res_intensity = analyze_intensity(audio_file_path)
     if isinstance(res_intensity, ErrorResponse):
         return res_intensity
@@ -229,7 +307,7 @@ def analyze_intonation(audio_file_path: str) -> Response:
     chars = [d["char"] for d in char_volumes]
     volumes = [d["volume"] for d in char_volumes]
 
-    # Get non-silent audio frames and sampling rate
+    # 2) Load audio and extract non-silent portion
     y, sampling_rate = load_audio(audio_file_path)
     spoken_audio = compute_spoken_audio(y, top_db=40)
     if spoken_audio.size == 0:
@@ -238,12 +316,13 @@ def analyze_intonation(audio_file_path: str) -> Response:
             error_details="An unknown error occured while removing silent intervals from audio frame."
         )
 
-    # character-aligned prosody summary
+    # 3) Character-aligned prosody
     result = summarize_char_level_prosody(
         spoken_audio=spoken_audio, sampling_rate=sampling_rate,
         chars=chars, volumes=volumes, hop_length=256
     )
 
+    # 4) Build final response
     response = IntonationResponse(
         status="SUCCESS",
         char_summary=result["char_summary"],

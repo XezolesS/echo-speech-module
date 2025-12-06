@@ -17,6 +17,23 @@ from response import ErrorResponse, IntensityResponse, Response
 
 
 def analyze_intensity(audio_file_path: str | PathLike) -> Response:
+    """
+    Analyze per-character intensity (volume in dB) from an audio file.
+
+    This function performs:
+    - Audio loading and transcription.
+    - Silence removal to extract spoken-only audio.
+    - Onset detection to estimate character boundaries.
+    - RMS-to-dB conversion for each detected character segment.
+    - Reconstruction of intensity values with spacing preserved.
+
+    Parameters:
+    - audio_file_path (str | PathLike): Path to the input audio file.
+
+    Returns:
+    - IntensityResponse: On success, containing per-character volume estimates.
+    - ErrorResponse: On failure (e.g., silent audio, recognition error).
+    """
     y, sampling_rate = load_audio(audio_file_path)
 
     # Transcribe audio

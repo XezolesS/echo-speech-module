@@ -1,15 +1,40 @@
-import os
+"""
+Speechrate analyzer module.
+
+Author:
+    김찬희
+"""
+
 import time
 from os import PathLike
-from typing import Dict
 
 import speech_recognition as sr
 
-from audio_utils import load_audio, compute_spoken_audio, transcribe_audio_file
-from response import ErrorResponse, SpeechrateResponse, Response
+from audio_utils import compute_spoken_audio, load_audio, transcribe_audio_file
+from response import ErrorResponse, Response, SpeechrateResponse
 
 
 def analyze_speechrate(audio_file_path: str | PathLike) -> Response:
+    """
+    Analyze speech rate (WPM & CPS) from an audio file.
+
+    This function performs:
+    - Audio loading and preprocessing.
+    - Speech recognition to obtain transcription.
+    - Silence removal to extract spoken-only audio.
+    - Calculation of:
+        - Words per minute (WPM)
+        - Characters per second (CPS)
+        - Total spoken duration (seconds)
+        - Word and character counts
+
+    Parameters:
+    - audio_file_path (str | PathLike): Path to the input audio file.
+
+    Returns:
+    - SpeechrateResponse: On success, containing speech-rate metrics.
+    - ErrorResponse: On failure (e.g., recognition error, silence removal error).
+    """
     start_time = time.time()
 
     y, sampling_rate = load_audio(audio_file_path)
