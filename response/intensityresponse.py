@@ -3,8 +3,8 @@ from .response import Response
 
 
 class IntensityResponse(Response):
-    def __init__(self):
-        super().__init__(char_volumes=[])
+    def __init__(self, status: str = "UNKNOWN"):
+        super().__init__(status=status, char_volumes=[])
 
     def add_char_volume(self, char: str, volume: float | np.float32):
         if isinstance(volume, np.float32):

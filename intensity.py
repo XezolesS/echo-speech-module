@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 
 import librosa
 import numpy as np
-# import speech_recognition as sr
+import speech_recognition as sr
 
 from audio_utils import (compute_spoken_audio, detect_onsets, load_audio,
                          transcribe_audio_file)
@@ -20,14 +20,16 @@ from response import ErrorResponse, IntensityResponse, Response
 def analyze_intensity(audio_file_path: str | PathLike) -> Response:
     y, sampling_rate = load_audio(audio_file_path)
 
-    text_full = transcribe_audio_file(audio_file_path, language='ko-KR')
-    text_no_spaces = text_full.replace(" ", "")
-    if not text_no_spaces:
-        return ErrorResponse(
-            error_name="Cannot Extract Texts",
-            error_details="Cannot extract texts from the audio"
-        )
+    # Transcribe audio
+    try:
+        text_full = transcribe_audio_file(
+            audio_file_path, language='ko-KR').strip()
+    except (sr.UnknownValueError, sr.RequestError) as e:
+        return ErrorResponse(error_name=e.__class__.__name__, error_details=e.args[0])
 
+    text_no_spaces = text_full.replace(" ", "")
+
+    # Get non-silent audio frames
     spoken_audio = compute_spoken_audio(y, top_db=40)
     if spoken_audio.size == 0:
         return ErrorResponse(
@@ -89,5 +91,7 @@ def analyze_intensity(audio_file_path: str | PathLike) -> Response:
         # add space
         if word != words_list[-1]:
             response.add_char_volume(char=' ', volume=-100.0)
+
+    response.set_value("status", "SUCCESS")
 
     return response
