@@ -141,6 +141,8 @@ def main() -> str | None:
         logger.info("Starts to process intensity")
 
         res_intensity = analyze_intensity(audio_file_path=file_path)
+        logger.debug("Intensity response: %s", res_intensity)
+
         response.set_value("intensity", res_intensity)
 
     # process speech rate
@@ -148,13 +150,17 @@ def main() -> str | None:
         logger.info("Starts to process speech rate")
 
         res_speechrate = analyze_speechrate(audio_file_path=file_path)
+        logger.debug("Speechrate response: %s", res_speechrate)
+
         response.set_value("speechrate", res_speechrate)
 
     # process intonation
     if args.intonation:
         logger.info("Starts to process intonation")
 
-        res_intonation = analyze_intonation(audio_path=file_path)
+        res_intonation = analyze_intonation(audio_file_path=file_path)
+        logger.debug("Intonation response: %s", res_intonation)
+
         response.set_value("intonation", res_intonation)
 
     # process articulation
@@ -163,6 +169,8 @@ def main() -> str | None:
 
         res_articulation = analyze_articulation(
             audio_file_path=file_path, reference_text=None)
+        logger.debug("Articulation response: %s", res_articulation)
+
         response.set_value("articulation", res_articulation)
 
     return response.to_json()
@@ -172,4 +180,5 @@ if __name__ == "__main__":
     result = main()
 
     if result is not None:
+        print("\n\nResult: ")
         print(result)
