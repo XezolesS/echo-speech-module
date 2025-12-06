@@ -26,6 +26,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+import concurrent.futures
 
 from articulation import analyze_articulation
 from intensity import analyze_intensity
@@ -77,6 +78,18 @@ def parse_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
         action="store_true",
         default=False,
         help="Analyze articulation."
+    )
+    parser.add_argument(
+        "--ref-text",
+        type=str,
+        default="",
+        help="A reference text to be spoken."
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=4,
+        help="A max number of threads to run modules."
     )
 
     # print help when no argument given
@@ -136,42 +149,44 @@ def main() -> str | None:
 
     response = Response()
 
-    # process intensity
+    # Build selected analysis tasks
+    tasks = {}
     if args.intensity:
-        logger.info("Starts to process intensity")
-
-        res_intensity = analyze_intensity(audio_file_path=file_path)
-        logger.debug("Intensity response: %s", res_intensity)
-
-        response.set_value("intensity", res_intensity)
-
-    # process speech rate
+        tasks["intensity"] = analyze_intensity
     if args.speechrate:
-        logger.info("Starts to process speech rate")
-
-        res_speechrate = analyze_speechrate(audio_file_path=file_path)
-        logger.debug("Speechrate response: %s", res_speechrate)
-
-        response.set_value("speechrate", res_speechrate)
-
-    # process intonation
+        tasks["speechrate"] = analyze_speechrate
     if args.intonation:
-        logger.info("Starts to process intonation")
-
-        res_intonation = analyze_intonation(audio_file_path=file_path)
-        logger.debug("Intonation response: %s", res_intonation)
-
-        response.set_value("intonation", res_intonation)
-
-    # process articulation
+        tasks["intonation"] = analyze_intonation
     if args.articulation:
-        logger.info("Starts to process articulation")
+        def _art_wrap(path: Path):
+            return analyze_articulation(audio_file_path=path, reference_text=args.ref_text)
 
-        res_articulation = analyze_articulation(
-            audio_file_path=file_path, reference_text=None)
-        logger.debug("Articulation response: %s", res_articulation)
+        tasks["articulation"] = _art_wrap
 
-        response.set_value("articulation", res_articulation)
+    # Execute selected tasks concurrently using threads
+    if tasks:
+        max_workers = min(args.max_workers, len(tasks))
+        logger.info("Submitting %d analysis tasks (max_workers=%d)",
+                    len(tasks), max_workers)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+            future_to_name = {}
+            for name, func in tasks.items():
+                logger.info("Starts to process %s", name)
+                # submit with positional path argument where possible
+                future = ex.submit(func, file_path)
+                future_to_name[future] = name
+
+            for fut in concurrent.futures.as_completed(future_to_name):
+                name = future_to_name[fut]
+                try:
+                    res = fut.result()
+                    logger.debug("%s response: %s", name.capitalize(), res)
+                except Exception as e:
+                    logger.exception("Task %s failed", name)
+                    res = ErrorResponse(
+                        error_name=e.__class__.__name__, error_details=str(e))
+
+                response.set_value(name, res)
 
     return response.to_json()
 
