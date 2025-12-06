@@ -61,4 +61,4 @@ class Response:
         Returns:
             str: JSON string
         """
-        return json.JSONEncoder(indent=2).encode(self.__data)
+        return json.dumps(self.__data, ensure_ascii=False, indent=2)
