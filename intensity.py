@@ -6,11 +6,10 @@ Author:
 """
 
 from os import PathLike
-from typing import Any, Dict, List
 
 import librosa
 import numpy as np
-import speech_recognition as sr
+from speech_recognition import RequestError, UnknownValueError
 
 from audio_utils import (compute_spoken_audio, detect_onsets, load_audio,
                          transcribe_audio_file)
@@ -24,7 +23,7 @@ def analyze_intensity(audio_file_path: str | PathLike) -> Response:
     try:
         text_full = transcribe_audio_file(
             audio_file_path, language='ko-KR').strip()
-    except (sr.UnknownValueError, sr.RequestError) as e:
+    except (UnknownValueError, RequestError) as e:
         return ErrorResponse(error_name=e.__class__.__name__, error_details=e.args[0])
 
     text_no_spaces = text_full.replace(" ", "")
