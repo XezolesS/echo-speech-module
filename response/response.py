@@ -9,6 +9,14 @@ import json
 from typing import Any
 
 
+class ResponseEncoder(json.JSONEncoder):
+    def default(self, o) -> (dict[str, Any] | Any):
+        if isinstance(o, Response):
+            return o.get_data()
+
+        return json.JSONEncoder.default(self, o)
+
+
 class Response:
     """
     A base class for a response.
@@ -61,4 +69,4 @@ class Response:
         Returns:
             str: JSON string
         """
-        return json.dumps(self.__data, ensure_ascii=False, indent=2)
+        return json.dumps(self.__data, ensure_ascii=False, indent=2, cls=ResponseEncoder)
