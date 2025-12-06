@@ -44,7 +44,8 @@ def analyze_speechrate(audio_file_path: str | PathLike) -> Response:
         text_full = transcribe_audio_file(
             audio_file_path, language='ko-KR').strip()
     except (sr.UnknownValueError, sr.RequestError) as e:
-        return ErrorResponse(error_name=e.__class__.__name__, error_details=e.args[0])
+        return ErrorResponse(error_name=e.__class__.__name__,
+                             error_details=e.args[0] if len(e.args) > 0 else "No details.")
 
     # Get non-silent audio frames
     spoken_audio = compute_spoken_audio(y, top_db=40)
