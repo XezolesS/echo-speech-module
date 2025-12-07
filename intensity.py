@@ -11,9 +11,9 @@ import librosa
 import numpy as np
 from speech_recognition import RequestError, UnknownValueError
 
-from .audio_utils import (compute_spoken_audio, detect_onsets, load_audio,
+from audio_utils import (compute_spoken_audio, detect_onsets, load_audio,
                           transcribe_audio_file)
-from .response import ErrorResponse, IntensityResponse, Response
+from response import ErrorResponse, IntensityResponse, Response
 
 
 def analyze_intensity(audio_file_path: str | PathLike) -> Response:

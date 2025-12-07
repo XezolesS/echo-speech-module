@@ -16,9 +16,9 @@ from typing import Any, Dict, List, Tuple
 import librosa
 import numpy as np
 
-from .audio_utils import compute_spoken_audio, detect_onsets, load_audio
-from .intensity import analyze_intensity
-from .response import ErrorResponse, IntonationResponse, Response
+from audio_utils import compute_spoken_audio, detect_onsets, load_audio
+from intensity import analyze_intensity
+from response import ErrorResponse, IntonationResponse, Response
 
 
 def select_boundaries_for_chars(
