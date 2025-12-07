@@ -28,11 +28,11 @@ import sys
 from pathlib import Path
 import concurrent.futures
 
-from .articulation import analyze_articulation
-from .intensity import analyze_intensity
-from .intonation import analyze_intonation
-from .response import ErrorResponse, Response
-from .speechrate import analyze_speechrate
+from articulation import analyze_articulation
+from intensity import analyze_intensity
+from intonation import analyze_intonation
+from response import ErrorResponse, Response
+from speechrate import analyze_speechrate
 
 SUPPORTED_EXTENSIONS = {
     ".wav"

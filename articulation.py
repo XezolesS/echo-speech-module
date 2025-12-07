@@ -11,8 +11,8 @@ import Levenshtein
 import librosa
 from speech_recognition import RequestError, UnknownValueError
 
-from .audio_utils import load_audio, transcribe_audio_file
-from .response import ArticulationResponse, ErrorResponse, Response
+from audio_utils import load_audio, transcribe_audio_file
+from response import ArticulationResponse, ErrorResponse, Response
 
 
 def analyze_articulation(
