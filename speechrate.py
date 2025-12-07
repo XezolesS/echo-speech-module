@@ -10,8 +10,8 @@ from os import PathLike
 
 import speech_recognition as sr
 
-from audio_utils import compute_spoken_audio, load_audio, transcribe_audio_file
-from response import ErrorResponse, Response, SpeechrateResponse
+from .audio_utils import compute_spoken_audio, load_audio, transcribe_audio_file
+from .response import ErrorResponse, Response, SpeechrateResponse
 
 
 def analyze_speechrate(audio_file_path: str | PathLike) -> Response:
