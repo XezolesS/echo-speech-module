@@ -10,6 +10,7 @@ from os import PathLike
 import Levenshtein
 import librosa
 from speech_recognition import RequestError, UnknownValueError
+import unicodedata
 
 from audio_utils import load_audio, transcribe_audio_file
 from response import ArticulationResponse, ErrorResponse, Response
@@ -19,6 +20,7 @@ def analyze_articulation(
         audio_file_path: str | PathLike,
         reference_text: str | None = None) -> Response:
     """
+
     Analyze articulation quality and fluency features from a speech audio file.
 
     This function extracts various speech metrics such as articulation rate,
@@ -60,6 +62,11 @@ def analyze_articulation(
           map 1:1 to syllables.
         - Silence detection uses librosa's energy-based splitting with `top_db=40`.
     """
+    # normalize and remove punctuation from texts before accuracy check
+    def _remove_punctuation(s: str) -> str:
+        """Remove all Unicode punctuation characters from a string."""
+        return ''.join(ch for ch in s if not unicodedata.category(ch).startswith('P'))
+
     y, sampling_rate = load_audio(audio_file_path)
 
     # Get length of spoken audio
@@ -88,8 +95,9 @@ def analyze_articulation(
 
     # Evaluate accuracy (if reference_text is given)
     if reference_text:
-        ref_clean = reference_text.strip()
-        hyp_clean = transcribed_text.strip()
+        # strip and remove punctuation for fair comparison
+        ref_clean = _remove_punctuation(reference_text.strip())
+        hyp_clean = _remove_punctuation(transcribed_text.strip())
 
         distance = Levenshtein.distance(ref_clean, hyp_clean)
         length = len(ref_clean)
@@ -107,7 +115,8 @@ def analyze_articulation(
         pause_ratio=pause_ratio,
         accuracy_score=accuracy,
         char_error_rate=cer,
-        transcription=transcribed_text
+        reference_text=ref_clean,
+        transcription=hyp_clean
     )
 
     return response
